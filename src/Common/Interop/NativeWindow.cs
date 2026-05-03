@@ -1,7 +1,7 @@
 ﻿// -----------------------------------------------------------------------
 // <copyright>
 //      Created by Matt Weber <matt@badecho.com>
-//      Copyright @ 2025 Bad Echo LLC. All rights reserved.
+//      Copyright @ 2026 Bad Echo LLC. All rights reserved.
 //
 //      Bad Echo Technologies are licensed under the
 //      GNU Affero General Public License v3.0.
@@ -215,7 +215,7 @@ public sealed class NativeWindow
             return;
 
         extendedStyle |= ExtendedWindowStyles.Transparent;
-
+        
         User32.SetWindowLongPtr(Handle,
                                 WindowAttribute.ExtendedStyle,
                                 new IntPtr((int) extendedStyle));
@@ -231,7 +231,7 @@ public sealed class NativeWindow
         style &= ~(WindowStyles.Caption | WindowStyles.SystemMenu);
 
         User32.SetWindowLongPtr(Handle,
-                                WindowAttribute.ExtendedStyle,
+                                WindowAttribute.Style,
                                 new IntPtr((int) style));
     }
 
