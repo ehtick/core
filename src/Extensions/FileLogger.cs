@@ -83,7 +83,7 @@ internal sealed class FileLogger : ILogger
         if (string.IsNullOrEmpty(message) && exception == null)
             return;
 
-        string path = _environment.ResolvePath(Options.Path);
+        string path = _environment.ResolvePath(Environment.ExpandEnvironmentVariables(Options.Path));
 
         lock (_NamedLocks.GetOrAdd(path, _ => new Lock()))
         {
