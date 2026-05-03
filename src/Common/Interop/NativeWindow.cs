@@ -228,7 +228,7 @@ public sealed class NativeWindow
     {
         var style = (WindowStyles) User32.GetWindowLongPtr(Handle, WindowAttribute.Style);
 
-        style &= ~(WindowStyles.Caption | WindowStyles.SystemMenu);
+        style &= ~WindowStyles.SystemMenu;
 
         User32.SetWindowLongPtr(Handle,
                                 WindowAttribute.Style,
