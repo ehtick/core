@@ -25,6 +25,16 @@ public enum ExtendedWindowStyles
     /// </summary>
     Transparent = 0x00000020,
     /// <summary>
+    /// The window is intended to be used as a floating toolbar, which gives it a smaller caption and a thinner frame border
+    /// than a standard window.
+    /// </summary>
+    /// <remarks>
+    /// This style also excludes the window from the taskbar and from the switcher displayed when the user presses Alt-Tab.
+    /// It is the only measure found to accomplish the latter: neither giving a window an owner nor cloaking it will
+    /// keep it out of the switcher.
+    /// </remarks>
+    ToolWindow = 0x00000080,
+    /// <summary>
     /// The window itself contains child windows that should take part in dialog box navigation.
     /// </summary>
     ControlParent = 0x00010000

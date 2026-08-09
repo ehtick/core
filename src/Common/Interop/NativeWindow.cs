@@ -116,6 +116,29 @@ public sealed class NativeWindow
     }
 
     /// <summary>
+    /// Gets or sets whether the window is cloaked.
+    /// </summary>
+    public bool IsCloaked
+    {
+        get;
+        set
+        {
+            int cloakValue = value ? 1 : 0;
+
+            ResultHandle hResult =
+                DesktopWindowManager.DwmSetWindowAttribute(Handle, DwmWindowAttribute.Cloak, cloakValue, sizeof(int));
+
+            if (hResult != ResultHandle.Success)
+            {
+                Logger.Error(Strings.CloakChangeFailure, hResult.GetException());
+                return;
+            }
+
+            field = value;
+        }
+    }
+
+    /// <summary>
     /// Gets a value indicating if this window has the visible style, that is, whether it can be drawn onto and displayed.
     /// This will return true for any window with the visible style, even if said window is minimized or obscured by other windows.
     /// </summary>
@@ -172,16 +195,88 @@ public sealed class NativeWindow
     /// <summary>
     /// Sets the windows style information so that said window is stripped of its title bar.
     /// </summary>
-    /// <param name="handle">A handle to the window.</param>
-    public static void RemoveTitleBar(WindowHandle handle)
+    public void RemoveTitleBar()
     {
-        var style = (WindowStyles) User32.GetWindowLongPtr(handle, WindowAttribute.Style);
+        var styles = (WindowStyles)User32.GetWindowLongPtr(Handle, WindowAttribute.Style);
 
-        style &= ~WindowStyles.SystemMenu;
+        styles &= ~WindowStyles.SystemMenu;
 
-        User32.SetWindowLongPtr(handle,
+        User32.SetWindowLongPtr(Handle,
                                 WindowAttribute.Style,
-                                new IntPtr((int) style));
+                                new IntPtr((int) styles));
+    }
+
+    /// <summary>
+    /// Adds or removes the specified extended window styles to or from the window's extended style information.
+    /// </summary>
+    /// <param name="stylesToChange">The extended styles to add or remove to or from the window's extended style information.</param>
+    /// <param name="add">
+    /// Value indicating if the specified extended styles should be added to or remove from the window's extended style information.
+    /// </param>
+    /// <param name="recalculateFrame">Value indicating if the change needs to be applied to the window's frame as well.</param>
+    /// <remarks>
+    /// Styles that alter the window's frame metrics only take effect once the frame is recalculated, which makes leaving
+    /// <c>recalculateFrame</c> false a way to have a style's behavioral effects without its visual ones.
+    /// </remarks>
+    public void ChangeExtendedStyles(ExtendedWindowStyles stylesToChange, bool add, bool recalculateFrame)
+    {
+        var extendedStyles = (ExtendedWindowStyles)User32.GetWindowLongPtr(Handle, WindowAttribute.ExtendedStyle);
+
+        ExtendedWindowStyles stylesToCommit = add ? extendedStyles | stylesToChange : extendedStyles & ~stylesToChange;
+
+        if (stylesToCommit == extendedStyles)
+            return;
+
+        User32.SetWindowLongPtr(Handle,
+                                WindowAttribute.ExtendedStyle,
+                                new IntPtr((int) stylesToCommit));
+
+        if (!recalculateFrame)
+            return;
+
+        // If a style changes the window's frame, it does not take effect until the window is told to recalculate it.
+        User32.SetWindowPos(Handle,
+                            IntPtr.Zero,
+                            0,
+                            0,
+                            0,
+                            0,
+                            WindowPositionFlags.FrameChanged
+                            | WindowPositionFlags.NoMove
+                            | WindowPositionFlags.NoSize
+                            | WindowPositionFlags.NoZOrder
+                            | WindowPositionFlags.NoActivate);
+    }
+    
+    /// <summary>
+    /// Adds or removes the specified extended window style to or from the window's extended style information.
+    /// </summary>
+    /// <param name="stylesToChange">The extended styles to add or remove to or from the window's extended style information.</param>
+    /// <param name="add">
+    /// Value indicating if the specified extended style should be added to or remove from the window's extended style information.
+    /// </param>
+    public void ChangeExtendedStyles(ExtendedWindowStyles stylesToChange, bool add)
+        => ChangeExtendedStyles(stylesToChange, add, false);
+
+    /// <summary>
+    /// Applies a brush of the specified color as the background for this window's class.
+    /// </summary>
+    /// <param name="r">The intensity of the red color.</param>
+    /// <param name="g">The intensity of the green color.</param>
+    /// <param name="b">The intensity of the blue color.</param>
+    /// <remarks>
+    /// After changing the class background, window instances must have their client areas invalidated in order for the new
+    /// background color to be painted. This can be done by invoking <see cref="Invalidate"/>.
+    /// </remarks>
+    public void ChangeClassBackground(byte r, byte g, byte b)
+    {
+        // Win32 COLORREF values use the BGR format.
+        int newBrushColor = (b << 16) | (g << 8) | r;
+
+        IntPtr newBrush = Gdi32.CreateSolidBrush(newBrushColor);
+        IntPtr oldBrush = User32.SetClassLongPtr(Handle, WindowClassAttribute.Background, newBrush);
+
+        Gdi32.DeleteObject(oldBrush);
     }
 
     /// <summary>
@@ -204,35 +299,6 @@ public sealed class NativeWindow
     /// thread's input queue, try again, and then detach from the thread.
     /// </para>
     /// </remarks>
-    /// <param name="handle">A handle to the window.</param>
-    public static bool SetForegroundWindow(WindowHandle handle)
-    {
-        if (User32.SetForegroundWindow(handle))
-            return true;
-
-        WindowHandle foregroundHwnd = User32.GetForegroundWindow();
-
-        uint foregroundThreadId = User32.GetWindowThreadProcessId(foregroundHwnd, nint.Zero);
-        uint currentThreadId = Kernel32.GetCurrentThreadId();
-
-        User32.AttachThreadInput(foregroundThreadId, currentThreadId, true);
-        // The proper way to bring ourselves to the foreground is through SetForegroundWindow; however, I have found success with
-        // falling back to the alternative BringWindowToTop if our attempts are still met with failure.
-        bool isForeground = User32.SetForegroundWindow(handle);
-
-        if (!isForeground)
-            isForeground = User32.BringWindowToTop(handle);
-
-        User32.AttachThreadInput(foregroundThreadId, currentThreadId, false);
-
-        return isForeground;
-    }
-
-    /// <inheritdoc cref="RemoveTitleBar(WindowHandle)"/>
-    public void RemoveTitleBar()
-        => RemoveTitleBar(Handle);
-
-    /// <inheritdoc cref="SetForegroundWindow(WindowHandle)"/>
     public bool SetForegroundWindow()
     {
         if (User32.SetForegroundWindow(Handle))
@@ -254,26 +320,6 @@ public sealed class NativeWindow
         User32.AttachThreadInput(foregroundThreadId, currentThreadId, false);
 
         return isForeground;
-    }
-
-    /// <summary>
-    /// Applies a brush of the specified color as the background for this window's class.
-    /// </summary>
-    /// <param name="r">The intensity of the red color.</param>
-    /// <param name="g">The intensity of the green color.</param>
-    /// <param name="b">The intensity of the blue color.</param>
-    /// <remarks>
-    /// After changing the class background, window instances must have their client areas invalidated in order for the new
-    /// background color to be painted. This can be done by invoking <see cref="Invalidate"/>.
-    /// </remarks>
-    public void ChangeClassBackground(byte r, byte g, byte b)
-    {   // Win32 COLORREF values use the BGR format.
-        int newBrushColor = (b << 16) | (g << 8) | r;
-        
-        IntPtr newBrush = Gdi32.CreateSolidBrush(newBrushColor);
-        IntPtr oldBrush = User32.SetClassLongPtr(Handle, WindowClassAttribute.Background, newBrush);
-        
-        Gdi32.DeleteObject(oldBrush);
     }
 
     /// <summary>

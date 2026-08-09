@@ -20,7 +20,7 @@ namespace BadEcho.Interop;
 internal enum WindowAttribute
 {
     /// <summary>
-    /// The extended window style.
+    /// The extended window styles.
     /// </summary>
     ExtendedStyle = -20,
     /// <summary>
@@ -37,7 +37,7 @@ internal enum WindowAttribute
     /// </summary>
     Identifier = -12,
     /// <summary>
-    /// The window style.
+    /// The window styles.
     /// </summary>
     Style = -16,
     /// <summary>
